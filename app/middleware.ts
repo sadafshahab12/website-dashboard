@@ -8,5 +8,5 @@ export default withAuth({
 
 export const config = {
   // Match the routes you want to protect
-  matcher: [, "/"], // protect /order and / (home) routes
+  matcher: ["/order", "/contacts", "/"], // protect /order and / (home) routes
 };

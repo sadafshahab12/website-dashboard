@@ -7,10 +7,12 @@ import { Home, ShoppingCart, Zap, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { signOut, useSession } from "next-auth/react";
+import { MdPermContactCalendar } from "react-icons/md";
 
 const NAV_ITEMS = [
   { name: "Home", path: "/", icon: Home },
   { name: "Order", path: "/order", icon: ShoppingCart },
+  { name: "Contact", path: "/contacts", icon: MdPermContactCalendar },
 ];
 
 const Navbar: React.FC = () => {

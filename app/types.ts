@@ -34,3 +34,14 @@ export interface Order {
   status: "pending" | "processing" | "completed";
   orderDate?: string;
 }
+export interface Contact {
+  _id: string;
+  _type: "contact";
+  name: string;
+  email: string;
+  phone: string;
+  country: string;
+  subject: "orderInquiry" | "productQuestion" | "returnsExchange" | "other";
+  message: string;
+  _createdAt: string; // ISO date string
+}
