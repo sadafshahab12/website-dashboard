@@ -26,6 +26,8 @@ interface SanityOrder {
   customerName: string;
   email: string;
   phone: string;
+  country: string;
+  city: string;
   address: string;
   products: SanityOrderProduct[];
   paymentMethod: "easypaisa" | "bank";
@@ -41,6 +43,8 @@ export const fetchOrders = async (): Promise<Order[]> => {
     customerName,
     email,
     phone,
+    country,
+    city,
     address,
     products[] {
       quantity,
@@ -71,6 +75,8 @@ export const fetchOrders = async (): Promise<Order[]> => {
     customerName: order.customerName,
     email: order.email,
     phone: order.phone,
+    country: order.country,
+    city: order.city,
     address: order.address,
     products: order.products.map(
       (p): OrderProduct => ({

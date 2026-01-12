@@ -23,6 +23,8 @@ export interface Order {
   time?: string;
   email: string;
   phone: string;
+  country: string;
+  city: string;
   address: string;
   products: OrderProduct[];
   paymentMethod: "easypaisa" | "bank";

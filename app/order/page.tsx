@@ -164,6 +164,8 @@ const OrdersPage: React.FC = () => {
       order.customerName?.toLowerCase().includes(q) ||
       order.email?.toLowerCase().includes(q) ||
       order.phone?.toLowerCase().includes(q) ||
+      order.country?.toLowerCase().includes(q) ||
+      order.city?.toLowerCase().includes(q) ||
       order.paymentMethod.toLowerCase().includes(q) ||
       order.status.toLowerCase().includes(q);
 
@@ -180,6 +182,8 @@ const OrdersPage: React.FC = () => {
       Customer: order.customerName,
       Email: order.email,
       Phone: order.phone,
+      Country: order.country,
+      City: order.city,
       Adress: order.address,
       Date: order.orderDate,
       Status: order.status,
@@ -213,8 +217,11 @@ const OrdersPage: React.FC = () => {
       head: [
         [
           "Order ID",
-          "Customer",
           "Date",
+          "Time",
+          "Customer",
+          "Country",
+          "City",
           "Address",
           "Products",
           "Price",
@@ -225,10 +232,12 @@ const OrdersPage: React.FC = () => {
       ],
       body: filteredOrders.map((o) => [
         o._id,
-        o.customerName,
         o.orderDate ?? "",
-        o.address,
         o.time ?? "",
+        o.customerName,
+        o.country,
+        o.city,
+        o.address,
         o.products.map((p) => `${p.product.name} × ${p.quantity}`).join(", "),
         o.products.map((p) => p.product.price).join(", "),
         o.status,
@@ -261,8 +270,11 @@ const OrdersPage: React.FC = () => {
       head: [
         [
           "Order ID",
-          "Customer",
           "Date",
+          "Time",
+          "Customer",
+          "Country",
+          "City",
           "Address",
           "Products",
           "Price",
@@ -273,9 +285,11 @@ const OrdersPage: React.FC = () => {
       ],
       body: paginatedOrders.map((o) => [
         o._id,
-        o.customerName,
         o.orderDate ?? "",
         o.time ?? "",
+        o.customerName,
+        o.country,
+        o.city,
         o.address,
         o.products.map((p) => `${p.product.name} × ${p.quantity}`).join(", "),
         o.products.map((p) => p.product.price).join(", "),
@@ -307,17 +321,24 @@ const OrdersPage: React.FC = () => {
 
       if (!res.ok) throw new Error("Delete failed");
 
+      // Remove order from state immediately
       setOrders((prev) => prev.filter((order) => order._id !== deleteOrderId));
 
-      setSuccessMessage(`Order deleted successfully`);
-      setTimeout(() => setSuccessMessage(null), 3000);
+      // If it was the only order on the current page, move back a page
+      if (paginatedOrders.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      }
+
+      toast.success("Order deleted successfully");
     } catch (err) {
       console.error(err);
+      toast.error("Failed to delete order");
     } finally {
       setDeleting(false);
       setDeleteOrderId(null);
     }
   };
+
   const statusIcon = {
     pending: <Clock size={14} />,
     processing: <Package size={14} />,
@@ -479,6 +500,8 @@ const OrdersPage: React.FC = () => {
                     {[
                       "Order ID",
                       "Customer",
+                      "Country",
+                      "City",
                       "Address",
                       "Products",
                       "Total",
@@ -538,9 +561,12 @@ const OrdersPage: React.FC = () => {
                 {[
                   "Order ID",
                   "Customer",
+                  "Country",
+                  "City",
                   "Address",
                   "Products",
                   "Single Amount",
+                  "Quantity",
                   "Total",
                   "Status",
                   "Payment",
@@ -597,6 +623,12 @@ const OrdersPage: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600 whitespace-normal wrap-break-word">
+                    {order.country}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600 whitespace-normal wrap-break-word">
+                    {order.city}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600 whitespace-normal wrap-break-word">
                     {order.address}
                   </td>
 
@@ -624,10 +656,15 @@ const OrdersPage: React.FC = () => {
                     </p>
                   </td>
                   <td className="px-6 py-4 font-semibold text-slate-700 text-sm">
-                    {order.products.map((p) => p.product.price)}
+                    {order.products.map((p) => `${p.product.price}`).join(", ")}
                   </td>
                   <td className="px-6 py-4 font-semibold text-slate-700 text-sm">
-                    {order.totalAmount}
+                    {order.products
+                      .map((p) => `${p.product.price} x ${p.quantity}`)
+                      .join(", ")}
+                  </td>
+                  <td className="px-6 py-4 font-semibold text-slate-700 text-sm">
+                    {order.totalAmount} - shipping 250
                   </td>
                   <td className="px-6 py-4">
                     <div className="relative group/select inline-block">
@@ -703,6 +740,8 @@ const OrdersPage: React.FC = () => {
                             customerName: order.customerName,
                             phone: order.phone,
                             email: order.email,
+                            country: order.country,
+                            city: order.city,
                             address: order.address,
                             orderDate: order.orderDate,
                             time: order.time,
@@ -817,7 +856,7 @@ const OrdersPage: React.FC = () => {
                 <p className="text-xs text-slate-500 truncate">{order.phone}</p>
                 <p className="text-xs text-slate-500 truncate">{order.email}</p>
                 <p className="text-xs text-slate-500 line-clamp-2 wrap-break-word">
-                  {order.address}
+                  {`${order.country} - ${order.city}`} {order.address}
                 </p>
                 <div className="text-xs text-slate-400 mt-0.5">
                   {order.orderDate} {order.time}
@@ -856,7 +895,9 @@ const OrdersPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-t border-slate-100 pt-3">
               <div className="flex flex-col gap-1">
                 <p className="text-xs text-slate-400">Total Amount</p>
-                <p className="font-bold text-slate-900">{order.totalAmount}</p>
+                <p className="font-bold text-slate-900">
+                  {order.totalAmount} - shipping 250
+                </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -949,6 +990,8 @@ const OrdersPage: React.FC = () => {
                       customerName: order.customerName,
                       phone: order.phone,
                       email: order.email,
+                      country: order.country,
+                      city: order.city,
                       address: order.address,
                       orderDate: order.orderDate,
                       time: order.time,
