@@ -51,12 +51,15 @@ export type Category = {
 
 export type Product = {
   _id: string;
+  _type: "product";
   _createdAt: string;
   name: string;
   description: string;
-  price: number;
+  originalPrice: number;
+  discountPrice?: number;
   size: string;
   material: string;
+  isTrending?: boolean;
   category: Category;
   promotion:
     | "none"
@@ -72,22 +75,14 @@ export type Product = {
   images: Image[];
   slug: Slug;
 };
-export interface CartItem extends Product {
-  quantity: number;
-}
-export type Review = {
-  _id: string;
-  _createdAt: string;
-  name: string; // reviewer name
-  text: string; // review text
-  rating: number; // rating out of 5
-  product?: {
-    // optional relation to a product
-    _ref: string;
-    _type: "reference";
-  };
-};
 
-export type CheckoutProduct = Pick<Product, "_id" | "price" | "name"> & {
-  quantity: number;
-};
+export interface Contact {
+  _type: "contact";
+  name: string;
+  email: string;
+  phone: string;
+  country: string;
+  subject: "orderInquiry" | "productQuestion" | "returnsExchange" | "other";
+  message: string;
+  createdAt?: string; // ISO date string
+}

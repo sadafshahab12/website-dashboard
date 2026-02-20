@@ -1,114 +1,99 @@
-// lib/fetchOrders.ts
 import { client } from "@/sanity/lib/client";
-import { Order, OrderProduct } from "../types";
+import { Order } from "../types";
 
-// Type representing the raw Sanity response for an order
-interface SanityProduct {
-  _id: string;
-  name: string;
-  description: string;
-  price: number;
-  material?: string;
-  careInstructions?: string[];
-  occasions?: string[];
-  colors?: string[];
-  images: { asset: { _ref: string; _type: string } }[];
-}
-
-interface SanityOrderProduct {
-  quantity: number;
-  price: number;
-  product: SanityProduct;
-}
-
-interface SanityOrder {
-  _id: string;
-  customerName: string;
-  email: string;
-  phone: string;
-  country: string;
-  city: string;
-  address: string;
-  products: SanityOrderProduct[];
-  paymentMethod: "easypaisa" | "bank";
-  transactionScreenshot: { asset: { _ref: string; _type: string } };
-  totalAmount: number;
-  _createdAt: string;
-  status: "pending" | "processing" | "completed";
-}
-
-export const fetchOrders = async (): Promise<Order[]> => {
+export const fetchOrders = async () => {
   const query = `*[_type == "order"] | order(_createdAt desc){
     _id,
+    _type,
+    orderNumber,
     customerName,
     email,
     phone,
     country,
     city,
     address,
+    postalCode,
+    paymentMethod,
+    "transactionScreenshot": transactionScreenshot.asset->url,
+    totalAmount,
+    _createdAt,
+    _updatedAt,
+    status,
     products[] {
+      _key,
       quantity,
-      price,
+      priceAtPurchase,
+      itemType,
       product->{
         _id,
+        _type,
         name,
         description,
         price,
-        material,
-        careInstructions,
-        occasions,
-        colors,
-        images
+        discountPrice,
+        "images": images[].asset->url
       }
-    },
-    paymentMethod,
-    transactionScreenshot,
-    totalAmount,
-    _createdAt,
-    status
+    }
   }`;
 
-  const data: SanityOrder[] = await client.fetch(query);
+  try {
+    const data = await client.fetch(query);
 
-  const formattedOrders: Order[] = data.map((order) => ({
-    _id: order._id,
-    customerName: order.customerName,
-    email: order.email,
-    phone: order.phone,
-    country: order.country,
-    city: order.city,
-    address: order.address,
-    products: order.products.map(
-      (p): OrderProduct => ({
-        product: {
-          _id: p.product._id,
-          name: p.product.name,
-          description: p.product.description,
-          price: p.product.price,
-          material: p.product.material,
-          careInstructions: p.product.careInstructions,
-          occasions: p.product.occasions,
-          colors: p.product.colors,
-          images: p.product.images,
+    return data.map((order: Order) => {
+      const dateObj = new Date(order._createdAt);
+
+      return {
+        _id: order._id,
+        _type: "order",
+        orderNumber: order.orderNumber || "N/A",
+        customerName: order.customerName,
+        email: order.email,
+        phone: order.phone,
+        country: order.country,
+        city: order.city,
+        address: order.address,
+        postalCode: order.postalCode,
+        paymentMethod: order.paymentMethod,
+        totalAmount: order.totalAmount,
+        status: order.status,
+        _createdAt: order._createdAt,
+        _updatedAt: order._updatedAt,
+        transactionScreenshot: {
+          _type: "image",
+          asset: {
+            _ref: order.transactionScreenshot || "",
+            _type: "reference",
+          },
         },
-        quantity: p.quantity,
-        price: p.price,
-      })
-    ),
-    paymentMethod: order.paymentMethod,
-    transactionScreenshot: order.transactionScreenshot,
-    totalAmount: order.totalAmount,
-    createdAt: order._createdAt,
-    status: order.status,
-    orderDate: new Date(order._createdAt).toLocaleString("en-US", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }),
-  }));
 
-  return formattedOrders;
+        products: (order.products || []).map((p) => ({
+          _key: p._key,
+          quantity: p.quantity,
+          priceAtPurchase: p.priceAtPurchase,
+          itemType: p.itemType || "product",
+          product: {
+            ...p.product,
+            _id: p.product?._id || "",
+            name: p.product?.name || "Unknown Product",
+            images: p.product?.images || [],
+          },
+        })),
+
+        // UI Helpers
+        orderDate: dateObj.toLocaleDateString("en-US", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }),
+        time: dateObj.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }),
+      };
+    });
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    return [];
+  }
 };

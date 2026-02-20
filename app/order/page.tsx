@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle, Clock, Package, X, ChevronDown } from "lucide-react";
+import { X, ChevronDown } from "lucide-react";
 import { urlFor } from "@/sanity/lib/image";
 import { fetchOrders } from "../lib/fetchOrder";
 import { Order } from "../types";
@@ -17,41 +17,18 @@ import { IoReceiptOutline } from "react-icons/io5";
 import { MdContentCopy, MdFilterList, MdOutlineClear } from "react-icons/md";
 import { formatOrderTime } from "../utils/formatOrderTime";
 import toast, { Toaster } from "react-hot-toast";
-
-type OrderStatus = "pending" | "processing" | "completed";
-
-const StatusBadge = ({ status }: { status: OrderStatus }) => {
-  const styles = {
-    pending: "bg-amber-100 text-amber-700 border-amber-200",
-    processing: "bg-blue-100 text-blue-700 border-blue-200",
-    completed: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  };
-
-  const icons = {
-    pending: <Clock size={14} />,
-    processing: <Package size={14} />,
-    completed: <CheckCircle size={14} />,
-  };
-
-  return (
-    <span
-      className={clsx(
-        "flex items-center gap-1.5 px-3 py-1  text-xs font-semibold border",
-        styles[status]
-      )}
-    >
-      {icons[status]}
-      <span className="capitalize">{status}</span>
-    </span>
-  );
-};
+import StatusBadge, {
+  OrderStatus,
+  statusIcon,
+} from "../components/StatusBadge";
+import { handleDownload } from "../actions/downloadPaymentReceipt";
 
 const OrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(
-    null
+    null,
   );
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -71,8 +48,8 @@ const OrdersPage: React.FC = () => {
     const loadOrders = async () => {
       const data = await fetchOrders();
 
-      const formattedData = data.map((order) => {
-        const dateObj = new Date(order.createdAt);
+      const formattedData = data.map((order: Order) => {
+        const dateObj = new Date(order._createdAt);
         return {
           ...order,
           orderDate: dateObj.toLocaleDateString("en-US", {
@@ -80,7 +57,7 @@ const OrdersPage: React.FC = () => {
             month: "short",
             year: "numeric",
           }),
-          time: formatOrderTime(order.createdAt),
+          time: formatOrderTime(order._createdAt),
         };
       });
 
@@ -92,7 +69,7 @@ const OrdersPage: React.FC = () => {
 
   const handleStatusChange = async (
     orderId: string,
-    newStatus: OrderStatus
+    newStatus: OrderStatus,
   ) => {
     setUpdatingOrderId(orderId);
     try {
@@ -107,11 +84,10 @@ const OrdersPage: React.FC = () => {
 
       setOrders((prev) =>
         prev.map((order) =>
-          order._id === orderId ? { ...order, status: newStatus } : order
-        )
+          order._id === orderId ? { ...order, status: newStatus } : order,
+        ),
       );
 
-      // FIXED: use orderId instead of order._id
       setSuccessMessage(`Order #${orderId.slice(-6)} updated successfully!`);
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error) {
@@ -120,35 +96,17 @@ const OrdersPage: React.FC = () => {
       setUpdatingOrderId(null);
     }
   };
-  // Inside your OrdersPage component
-  const handleDownload = async (url: string) => {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Failed to fetch image");
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
 
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `PaymentProof_${Date.now()}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      window.URL.revokeObjectURL(blobUrl); // Clean up
-    } catch (error) {
-      console.error("Download failed:", error);
-    }
-  };
-  const filteredOrders = orders.filter((order) => {
-    // ---- DATE FILTER ----
+  const filteredOrders = orders.filter((order: Order) => {
     if (fromDate || toDate) {
-      const orderTime = new Date(order.createdAt).getTime();
+      const orderTime = new Date(order._createdAt).getTime();
 
+      // From Date logic
       const fromTime = fromDate
         ? new Date(fromDate).setHours(0, 0, 0, 0)
         : null;
 
+      // To Date logic
       const toTime = toDate ? new Date(toDate).setHours(23, 59, 59, 999) : null;
 
       if (fromTime && orderTime < fromTime) return false;
@@ -160,17 +118,21 @@ const OrdersPage: React.FC = () => {
 
     const q = searchQuery.toLowerCase();
 
+    // Customer aur Order Details Match
     const customerMatch =
+      order.orderNumber?.toLowerCase().includes(q) ||
       order.customerName?.toLowerCase().includes(q) ||
+      order.products.map((p) => p.itemType.toLowerCase()).includes(q) ||
       order.email?.toLowerCase().includes(q) ||
       order.phone?.toLowerCase().includes(q) ||
       order.country?.toLowerCase().includes(q) ||
       order.city?.toLowerCase().includes(q) ||
-      order.paymentMethod.toLowerCase().includes(q) ||
-      order.status.toLowerCase().includes(q);
+      order.paymentMethod?.toLowerCase().includes(q) ||
+      order.status?.toLowerCase().includes(q);
 
-    const productMatch = order.products.some((p) =>
-      p.product.name?.toLowerCase().includes(q)
+    // Product Name Match (OrderProduct interface ke mutabiq)
+    const productMatch = order.products?.some((p) =>
+      p.product?.name?.toLowerCase().includes(q),
     );
 
     return customerMatch || productMatch;
@@ -179,6 +141,7 @@ const OrdersPage: React.FC = () => {
   const downloadExcel = () => {
     const data = filteredOrders.map((order) => ({
       OrderID: order._id,
+      OrderNumber: order.orderNumber,
       Customer: order.customerName,
       Email: order.email,
       Phone: order.phone,
@@ -188,11 +151,12 @@ const OrdersPage: React.FC = () => {
       Date: order.orderDate,
       Status: order.status,
       Payment: order.paymentMethod,
-      SingleAmount: order.products.map((p) => p.product.price).join(", "),
-      Total: order.totalAmount,
-      Products: order.products
-        .map((p) => `${p.product.name} x${p.quantity}`)
+      SingleAmount: order.products
+        .map((p) => p.product.discountPrice)
         .join(", "),
+      quantity: order.products.map((p) => p.quantity).join(", "),
+      Total: order.totalAmount,
+      Products: order.products.map((p) => `${p.product.name}`).join(", "),
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -202,7 +166,7 @@ const OrdersPage: React.FC = () => {
 
     XLSX.writeFile(workbook, `Orders_${Date.now()}.xlsx`);
   };
-  // --- PDF for all filtered orders ---
+
   const downloadAllPDF = () => {
     const doc = new jsPDF({
       orientation: "landscape",
@@ -210,20 +174,19 @@ const OrdersPage: React.FC = () => {
       format: "a4",
     });
 
-    doc.text("Orders Report (All Pages)", 14, 15);
-
     autoTable(doc, {
-      startY: 25,
+      startY: 40,
+      margin: { left: 20, right: 20, bottom: 40 }, // Add bottom margin for page numbers
       head: [
         [
-          "Order ID",
+          "ID",
+          "Order #",
           "Date",
-          "Time",
           "Customer",
-          "Country",
-          "City",
+          "Location",
           "Address",
           "Products",
+          "Qty",
           "Price",
           "Status",
           "Payment",
@@ -231,31 +194,62 @@ const OrdersPage: React.FC = () => {
         ],
       ],
       body: filteredOrders.map((o) => [
-        o._id,
-        o.orderDate ?? "",
-        o.time ?? "",
+        o._id.substring(o._id.length - 6),
+        o.orderNumber || "N/A",
+        `${o.orderDate ?? ""}\n${o.time ?? ""}`,
         o.customerName,
-        o.country,
-        o.city,
+        `${o.city}, ${o.country}`,
         o.address,
-        o.products.map((p) => `${p.product.name} × ${p.quantity}`).join(", "),
-        o.products.map((p) => p.product.price).join(", "),
+        o.products.map((p) => p.product.name).join("\n"),
+        o.products.map((p) => p.quantity).join("\n"),
+        o.products.map((p) => `$${p.product.discountPrice}`).join("\n"),
         o.status,
         o.paymentMethod,
-        o.totalAmount,
+        `$${o.totalAmount.toLocaleString()}`,
       ]),
-      styles: { fontSize: 8, cellPadding: 3, overflow: "linebreak" },
-      headStyles: { fillColor: [79, 70, 229], textColor: 255 },
+      // Global Styles
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 4,
+        valign: "middle",
+        overflow: "linebreak",
+      },
+      headStyles: {
+        fillColor: [79, 70, 229],
+        textColor: 255,
+        fontSize: 8,
+        fontStyle: "bold",
+      },
+      // Specific Column Tuning
       columnStyles: {
-        3: { cellWidth: 200 },
-        4: { cellWidth: 180 },
+        0: { cellWidth: 35 }, // ID
+        2: { cellWidth: 55 }, // Date/Time
+        5: { cellWidth: 90 }, // Address
+        6: { cellWidth: 120 }, // Products (Primary focus)
+        7: { halign: "center", cellWidth: 25 }, // Qty center aligned
+        11: { fontStyle: "bold", halign: "right" }, // Total bolded
+      },
+      // Add Header and Footer to every page
+      didDrawPage: (data) => {
+        // Header
+        doc.setFontSize(14);
+        doc.setTextColor(40);
+        doc.text("Orders Master Report", 20, 25);
+
+        // Footer: Page X of Y
+        const str = "Page " + doc.getNumberOfPages();
+        doc.setFontSize(10);
+        const pageSize = doc.internal.pageSize;
+        const pageHeight = pageSize.height
+          ? pageSize.height
+          : pageSize.getHeight();
+        doc.text(str, data.settings.margin.left, pageHeight - 20);
       },
     });
 
-    doc.save(`Orders_All_${Date.now()}.pdf`);
+    doc.save(`Full_Orders_Report_${Date.now()}.pdf`);
   };
 
-  // --- PDF for current page only ---
   const downloadPagePDF = () => {
     const doc = new jsPDF({
       orientation: "landscape",
@@ -263,13 +257,17 @@ const OrdersPage: React.FC = () => {
       format: "a4",
     });
 
-    doc.text(`Orders Report (Page ${currentPage})`, 14, 15);
+    // Title with better spacing
+    doc.setFontSize(16);
+    doc.text(`Orders Report (Page ${currentPage})`, 40, 30);
 
     autoTable(doc, {
-      startY: 25,
+      startY: 45,
+      margin: { left: 20, right: 20 }, // Reduce margins to gain space
       head: [
         [
-          "Order ID",
+          "ID",
+          "Order #",
           "Date",
           "Time",
           "Customer",
@@ -277,6 +275,7 @@ const OrdersPage: React.FC = () => {
           "City",
           "Address",
           "Products",
+          "Qty",
           "Price",
           "Status",
           "Payment",
@@ -284,24 +283,46 @@ const OrdersPage: React.FC = () => {
         ],
       ],
       body: paginatedOrders.map((o) => [
-        o._id,
+        o._id.substring(0, 8), // Shorten ID for space
+        o.orderNumber || "N/A",
         o.orderDate ?? "",
         o.time ?? "",
         o.customerName,
         o.country,
         o.city,
         o.address,
-        o.products.map((p) => `${p.product.name} × ${p.quantity}`).join(", "),
-        o.products.map((p) => p.product.price).join(", "),
+        o.products.map((p) => p.product.name).join("\n"), // Use \n for vertical stacking
+        o.products.map((p) => p.quantity).join("\n"),
+        o.products.map((p) => `$${p.product.discountPrice}`).join("\n"),
         o.status,
         o.paymentMethod,
-        o.totalAmount,
+        `$${o.totalAmount}`,
       ]),
-      styles: { fontSize: 8, cellPadding: 3, overflow: "linebreak" },
-      headStyles: { fillColor: [79, 70, 229], textColor: 255 },
+      styles: {
+        fontSize: 7, // Smaller font for high column count
+        cellPadding: 3,
+        overflow: "linebreak",
+        halign: "left",
+      },
+      headStyles: {
+        fillColor: [79, 70, 229],
+        textColor: 255,
+        fontStyle: "bold",
+      },
+      // Strategic column widths
       columnStyles: {
-        3: { cellWidth: 200 },
-        4: { cellWidth: 180 },
+        0: { cellWidth: 40 }, // ID
+        4: { cellWidth: 70 }, // Customer
+        7: { cellWidth: 80 }, // Address
+        8: { cellWidth: 100 }, // Products (Largest)
+        11: { cellWidth: 50 }, // Status
+      },
+      didParseCell: (data) => {
+        // Optional: Color status text
+        if (data.section === "body" && data.column.index === 11) {
+          if (data.cell.raw === "Completed")
+            data.cell.styles.textColor = [0, 128, 0];
+        }
       },
     });
 
@@ -339,15 +360,10 @@ const OrdersPage: React.FC = () => {
     }
   };
 
-  const statusIcon = {
-    pending: <Clock size={14} />,
-    processing: <Package size={14} />,
-    completed: <CheckCircle size={14} />,
-  };
   // Calculate paginated orders
   const paginatedOrders = filteredOrders.slice(
     (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
+    currentPage * rowsPerPage,
   );
 
   // Total pages
@@ -561,15 +577,14 @@ const OrdersPage: React.FC = () => {
                 {[
                   "Order ID",
                   "Customer",
-                  "Country",
-                  "City",
+                  "Location",
                   "Address",
                   "Products",
+                  "Item Type",
                   "Single Amount",
                   "Quantity",
                   "Total",
                   "Status",
-                  "Payment",
                   "Payment Proof View",
                   "Product View",
                   "Actions",
@@ -593,12 +608,15 @@ const OrdersPage: React.FC = () => {
                   className={clsx(
                     "hover:bg-slate-50/50 transition-colors group",
                     order.status === "completed" &&
-                      "bg-indigo-100 text-gray-400 cursor-not-allowed"
+                      "bg-indigo-100 text-gray-400 cursor-not-allowed",
                   )}
                 >
                   <td className="px-6 py-4">
                     <span className="font-mono text-sm text-slate-500 font-medium">
                       #{order._id}
+                    </span>
+                    <span className="font-mono text-sm text-slate-500 font-medium">
+                      PRN-{order.orderNumber}
                     </span>
                     <div className="text-xs text-slate-400 mt-0.5">
                       {order.orderDate}
@@ -623,11 +641,9 @@ const OrdersPage: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600 whitespace-normal wrap-break-word">
-                    {order.country}
+                    {order.country} - {order.city}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600 whitespace-normal wrap-break-word">
-                    {order.city}
-                  </td>
+
                   <td className="px-6 py-4 text-sm text-slate-600 whitespace-normal wrap-break-word">
                     {order.address}
                   </td>
@@ -656,11 +672,18 @@ const OrdersPage: React.FC = () => {
                     </p>
                   </td>
                   <td className="px-6 py-4 font-semibold text-slate-700 text-sm">
-                    {order.products.map((p) => `${p.product.price}`).join(", ")}
+                    {[...new Set(order.products.map((p) => p.itemType))].join(
+                      ", ",
+                    )}
                   </td>
                   <td className="px-6 py-4 font-semibold text-slate-700 text-sm">
                     {order.products
-                      .map((p) => `${p.product.price} x ${p.quantity}`)
+                      .map((p) => `${p.product.discountPrice}`)
+                      .join(", ")}
+                  </td>
+                  <td className="px-6 py-4 font-semibold text-slate-700 text-sm">
+                    {order.products
+                      .map((p) => `${p.product.discountPrice} x ${p.quantity}`)
                       .join(", ")}
                   </td>
                   <td className="px-6 py-4 font-semibold text-slate-700 text-sm">
@@ -675,7 +698,7 @@ const OrdersPage: React.FC = () => {
                         onChange={(e) =>
                           handleStatusChange(
                             order._id,
-                            e.target.value as OrderStatus
+                            e.target.value as OrderStatus,
                           )
                         }
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -686,20 +709,19 @@ const OrdersPage: React.FC = () => {
                       </select>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">
-                    {order.paymentMethod}
-                  </td>
+
                   <td className="px-6 py-4">
                     <button
                       onClick={() =>
                         setSelectedScreenshot(
-                          urlFor(order.transactionScreenshot).url()
+                          order.transactionScreenshot.asset._ref,
                         )
                       }
                       className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50  transition-all"
                       title="View Proof of Payment"
                     >
                       <IoReceiptOutline size={18} />
+                      {order.paymentMethod}
                     </button>
                   </td>
                   <td className="px-6 py-4">
@@ -708,7 +730,7 @@ const OrdersPage: React.FC = () => {
                       className={clsx(
                         "p-2 bg-indigo-50 text-indigo-600",
                         order.status === "completed" &&
-                          "opacity-50 cursor-not-allowed"
+                          "opacity-50 cursor-not-allowed",
                       )}
                       title="View Products"
                       disabled={order.status === "completed"}
@@ -724,7 +746,7 @@ const OrdersPage: React.FC = () => {
                         className={clsx(
                           "p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-md",
                           order.status === "completed" &&
-                            "opacity-50 cursor-not-allowed"
+                            "opacity-50 cursor-not-allowed",
                         )}
                         title="Delete Order"
                         disabled={order.status === "completed"}
@@ -755,7 +777,7 @@ const OrdersPage: React.FC = () => {
                             paymentMethod: order.paymentMethod,
                           };
                           navigator.clipboard.writeText(
-                            JSON.stringify(orderData, null, 2)
+                            JSON.stringify(orderData, null, 2),
                           );
                           toast.success("Order data copied to clipboard!");
                         }}
@@ -804,7 +826,7 @@ const OrdersPage: React.FC = () => {
                     className={clsx(
                       "px-3 py-1 border rounded-md text-sm hover:bg-indigo-100",
                       currentPage === page &&
-                        "bg-indigo-600 text-white border-indigo-600"
+                        "bg-indigo-600 text-white border-indigo-600",
                     )}
                   >
                     {page}
@@ -841,7 +863,7 @@ const OrdersPage: React.FC = () => {
             className={clsx(
               "bg-white p-4 shadow-sm border border-slate-100 rounded-md flex flex-col gap-4",
               order.status === "completed" &&
-                "bg-gray-100 text-gray-400 cursor-not-allowed"
+                "bg-gray-100 text-gray-400 cursor-not-allowed",
             )}
           >
             {/* Header */}
@@ -915,7 +937,7 @@ const OrdersPage: React.FC = () => {
                           order.status === "completed",
                         "opacity-50 cursor-not-allowed":
                           order.status === "completed",
-                      }
+                      },
                     )}
                     title={order.status}
                   >
@@ -929,7 +951,7 @@ const OrdersPage: React.FC = () => {
                     onChange={(e) =>
                       handleStatusChange(
                         order._id,
-                        e.target.value as OrderStatus
+                        e.target.value as OrderStatus,
                       )
                     }
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -944,13 +966,13 @@ const OrdersPage: React.FC = () => {
                 <button
                   onClick={() =>
                     setSelectedScreenshot(
-                      urlFor(order.transactionScreenshot).url()
+                      order.transactionScreenshot.asset._ref,
                     )
                   }
                   className={clsx(
                     "p-2 bg-indigo-50 text-indigo-600 rounded-md",
                     order.status === "completed" &&
-                      "opacity-50 cursor-not-allowed"
+                      "opacity-50 cursor-not-allowed",
                   )}
                   disabled={order.status === "completed"}
                 >
@@ -962,7 +984,7 @@ const OrdersPage: React.FC = () => {
                   className={clsx(
                     "p-2 bg-indigo-50 text-indigo-600 rounded-md",
                     order.status === "completed" &&
-                      "opacity-50 cursor-not-allowed"
+                      "opacity-50 cursor-not-allowed",
                   )}
                   disabled={order.status === "completed"}
                   title="View Products"
@@ -975,7 +997,7 @@ const OrdersPage: React.FC = () => {
                   className={clsx(
                     "p-2 bg-red-50 text-red-600 rounded-md",
                     order.status === "completed" &&
-                      "opacity-50 cursor-not-allowed"
+                      "opacity-50 cursor-not-allowed",
                   )}
                   disabled={order.status === "completed"}
                 >
@@ -1003,7 +1025,7 @@ const OrdersPage: React.FC = () => {
                       status: order.status,
                     };
                     navigator.clipboard.writeText(
-                      JSON.stringify(orderData, null, 2)
+                      JSON.stringify(orderData, null, 2),
                     );
                     toast.success("Order data copied to clipboard!");
                   }}
@@ -1133,7 +1155,7 @@ const OrdersPage: React.FC = () => {
                         Qty: {p.quantity}
                       </p>
                       <p className="text-base font-semibold text-slate-900 mt-1">
-                        ${p.price}
+                        ${p.priceAtPurchase}
                       </p>
                     </div>
                   </div>

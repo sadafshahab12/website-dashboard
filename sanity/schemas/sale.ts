@@ -1,18 +1,30 @@
 import { defineField, defineType } from "sanity";
 
-export const product = defineType({
-  name: "product",
-  title: "Product",
+export const sale = defineType({
+  name: "sale",
+  title: "Sale",
   type: "document",
-
   fields: [
+    defineField({
+      name: "status",
+      title: "Sale Status",
+      type: "string",
+      options: {
+        list: [
+          { title: "Live (Visible on Page)", value: "live" },
+          { title: "Archived (Hidden)", value: "archived" },
+          { title: "Draft", value: "draft" },
+        ],
+        layout: "radio", 
+      },
+      initialValue: "live", 
+    }),
     defineField({
       name: "name",
       title: "Name",
       type: "string",
       validation: (Rule) => Rule.required(),
     }),
-
     defineField({
       name: "slug",
       title: "Slug",
@@ -20,7 +32,6 @@ export const product = defineType({
       options: { source: "name" },
       validation: (Rule) => Rule.required(),
     }),
-
     defineField({
       name: "category",
       title: "Category",
@@ -28,7 +39,31 @@ export const product = defineType({
       to: [{ type: "category" }],
       validation: (Rule) => Rule.required(),
     }),
+    defineField({
+      name: "stockQuantity",
+      title: "Stock Quantity",
+      type: "number",
+      description: "How many units are available?",
+      initialValue: 0,
+      validation: (Rule) => Rule.required().min(0),
+    }),
 
+    defineField({
+      name: "isSoldOut",
+      title: "Sold Out",
+      description:
+        "Toggle this on to show a 'Sold Out' overlay and disable 'Add to Cart'",
+      type: "boolean",
+      initialValue: false,
+    }),
+    defineField({
+      name: "showSaleBadge",
+      title: "Show Sale Badge?",
+      description:
+        "If active, a 'SALE' or '% Off' badge will appear on the card",
+      type: "boolean",
+      initialValue: true,
+    }),
     defineField({
       name: "originalPrice",
       title: "Original Price",
@@ -39,7 +74,7 @@ export const product = defineType({
       name: "discountPrice",
       title: "Discount Price",
       type: "number",
-      description: "Sale price of the product (leave blank if no discount)",
+      description: "Current sale price. If empty, product is full price.",
       validation: (Rule) =>
         Rule.min(0).custom((discountPrice, context) => {
           const doc = context.document as { originalPrice?: number };
@@ -48,18 +83,10 @@ export const product = defineType({
             doc.originalPrice &&
             discountPrice >= doc.originalPrice
           ) {
-            return "Discount price must be lower than the original price";
+            return "Discount price must be lower than original price";
           }
           return true;
         }),
-    }),
-    defineField({
-      name: "isTrending",
-      title: "Is Trending?",
-      description:
-        "Check this to show this product in the search overlay trending section",
-      type: "boolean",
-      initialValue: false,
     }),
     defineField({
       name: "promotion",
@@ -70,16 +97,13 @@ export const product = defineType({
           { title: "None", value: "none" },
           { title: "New Arrival", value: "new" },
           { title: "Bestseller", value: "bestseller" },
-          { title: "Featured", value: "featured" },
           { title: "Limited Edition", value: "limited" },
-          { title: "Clearance", value: "clearance" },
         ],
-        layout: "radio", // or "dropdown"
       },
       initialValue: "none",
-      validation: (Rule) => Rule.required(),
     }),
 
+    // --- MEDIA & DETAILS ---
     defineField({
       name: "images",
       title: "Images",
@@ -91,58 +115,35 @@ export const product = defineType({
           fields: [
             defineField({
               name: "alt",
-              title: "Alternative Text",
+              title: "Alt Text",
               type: "string",
               validation: (Rule) => Rule.required(),
             }),
           ],
         },
       ],
-      validation: (Rule) => Rule.max(3),
+      validation: (Rule) => Rule.required().min(1).max(4),
     }),
-
     defineField({
       name: "description",
       title: "Description",
       type: "text",
     }),
-
     defineField({
       name: "material",
       title: "Material",
       type: "string",
+      placeholder: "e.g., Gold Plated, Silver, Brass",
     }),
-
-    defineField({
-      name: "size",
-      title: "Size",
-      type: "string",
-    }),
-
     defineField({
       name: "colors",
       title: "Colors",
       type: "array",
       of: [{ type: "string" }],
     }),
-
     defineField({
       name: "occasions",
       title: "Occasions",
-      type: "array",
-      of: [{ type: "string" }],
-    }),
-
-    defineField({
-      name: "tags",
-      title: "Tags",
-      type: "array",
-      of: [{ type: "string" }],
-    }),
-
-    defineField({
-      name: "careInstructions",
-      title: "Care Instructions",
       type: "array",
       of: [{ type: "string" }],
     }),
@@ -152,23 +153,18 @@ export const product = defineType({
     select: {
       title: "name",
       media: "images.0",
-      promotion: "promotion",
-      price: "price",
+      isSoldOut: "isSoldOut",
+      dPrice: "discountPrice",
+      oPrice: "originalPrice",
     },
-    prepare({ title, media, promotion, price }) {
-      const labelMap: Record<string, string> = {
-        new: "🆕 New",
-        bestseller: "🔥 Bestseller",
-        featured: "⭐ Featured",
-        limited: "⏳ Limited",
-        clearance: "💸 Clearance",
-        none: "",
-      };
+    prepare({ title, media, isSoldOut, dPrice, oPrice }) {
+      const priceDisplay = dPrice ? `PKR ${dPrice} (Sale)` : `PKR ${oPrice}`;
+      const status = isSoldOut ? "❌ SOLD OUT" : "✅ Available";
 
       return {
-        title,
-        media,
-        subtitle: `${labelMap[promotion] || ""} PKR ${price}`,
+        title: title,
+        media: media,
+        subtitle: `${status} | ${priceDisplay}`,
       };
     },
   },
